@@ -19,3 +19,5 @@
 混流需要用到 mkvmerge.exe ，下载: https://mkvtoolnix.download/downloads.html 后安装，在同目录下就有。
 
 繁化使用繁化姬: https://zhconvert.org/
+
+卡拉OK模板化需要用的 aegisub-cli ，下载: https://github.com/Myaamori/aegisub-cli/releases 后将 exe 放在您使用的 Aegisub 同目录下即可。
