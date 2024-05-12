@@ -6,9 +6,9 @@
 
 字幕请保持 Aegisub 的标准输出格式，字幕中也请不要乱用标签和括号(例如\fn和\p交替连续使用或者输入错误的大括号)，不然可能会出各种问题。
 
-基础使用说明: https://github.com/KyokuSai/ASSFont/wiki
+基础使用说明: [ASSFun wiki](https://github.com/KyokuSai/ASSFont/wiki)
 
-如果您想使用字幕处理功能，请务必看一下字幕生成说明: https://github.com/KyokuSai/ASSFont/wiki/ASSFun-%E2%80%90-%E8%A7%86%E9%A2%91%E6%B7%B7%E6%B5%81
+如果您想使用字幕处理功能，请务必看一下字幕生成说明: [ASSFun ‐ 字幕生成](https://github.com/KyokuSai/ASSFont/wiki/ASSFun-%E2%80%90-%E8%A7%86%E9%A2%91%E6%B7%B7%E6%B5%81)
 
 # 关于
 
