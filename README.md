@@ -21,3 +21,11 @@
 繁化使用繁化姬: https://zhconvert.org/
 
 卡拉OK模板化需要用到 aegisub-cli ，下载: https://github.com/Myaamori/aegisub-cli/releases 后将 exe 放在您使用的 Aegisub 同目录下即可。
+
+# 更新日志
+
+240513: 为 aegisub-cli.exe 额外准备了文件处理，以避免部分文件名不能被其读取的问题。
+
+240512: 添加字幕生成功能；修复了一点文件逻辑问题。
+
+240510: 初版。
