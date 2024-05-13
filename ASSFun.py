@@ -7,7 +7,6 @@ import shutil
 from fontTools.ttLib import TTFont
 from fontTools import subset
 import random
-import string
 from PIL import Image
 import requests, subprocess
 
@@ -338,7 +337,7 @@ class ASSGenerate:
                 language = scriptinfo_language[2]
             scriptinfo = re.sub(r"\{LANGUAGE\}", language, scriptinfo)
         content = re.sub(
-            r"\[Script Info\][\s\S\n]+?(?=\[)",
+            r"\[Script Info\][\s\S\n]+?\n(?=\[)",
             f"{scriptinfo}\n\n",
             content,
             flags=re.IGNORECASE,
@@ -411,9 +410,9 @@ class ASSGenerate:
     # 获取 style 名
     def getstyle(self, content: str) -> str | None:
         stylestring = re.search(
-            r"^(Style:[\s\S\n]+?)(?=\[)", content, re.MULTILINE
+            r"^(Style:[\s\S\n]+?)\n(?=\[)", content, re.MULTILINE
         ).group(1)
-        stylestring = re.sub("\n+", "\n", stylestring)[:-1]
+        stylestring = re.sub("\n+", "\n", f"{stylestring}\n")[:-1]
         assstyles = self.master.getconfig("assstyles")
         for _, _assstyles in assstyles.items():
             for assstyle, assstylestring in _assstyles.items():
@@ -434,8 +433,8 @@ class ASSGenerate:
         stylestring += assstyles[lang][style]
         stylestring += "\n\n"
         content = re.sub(
-            r"^\[V4\+ Styles\][\s\S\n]+?(?=\[)",
-            stylestring,
+            r"^\[V4\+ Styles\][\s\S\n]+?\n(?=\[)",
+            f"{stylestring}\n",
             content,
             flags=re.MULTILINE,
         )
@@ -601,6 +600,14 @@ class ASSGenerate:
         generate_language = generate_language.split(",")
         scriptinfo_language: str = self.master.getconfig("scriptinfo_language")
         scriptinfo_language = scriptinfo_language.split(",")
+        mkv_tmp = "".join(
+            random.choice(
+                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+            )
+            for _ in range(8)
+        )
+        mkv_tmp = f"{self.master.folder}\\ass\\{mkv_tmp}.mkv"
+        shutil.copy(self.master.mkv[0], mkv_tmp)
         for index, asss in enumerate([self.asschss, self.asschts, self.assjpns]):
             for ass in asss:
                 filename = re.sub(
@@ -614,8 +621,18 @@ class ASSGenerate:
                     filename,
                 )
                 self.master.log(f"生成{filename}")
+                karaoke_tmp = "".join(
+                    random.choice(
+                        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+                    )
+                    for _ in range(8)
+                )
+                karaoke_out = f"{karaoke_tmp}.out.ass"
+                karaoke_tmp = f"{karaoke_tmp}.ass"
                 with open(
-                    f"{self.master.folder}\\ass\\.{filename}", "w", encoding="utf-8-sig"
+                    f"{self.master.folder}\\ass\\.{karaoke_tmp}",
+                    "w",
+                    encoding="utf-8-sig",
                 ) as file:
                     file.write(ass)
                 aegisub_cli_path: str = self.master.getconfig("aegisub_cli_path")
@@ -625,13 +642,13 @@ class ASSGenerate:
                 command = [
                     aegisub_cli_path,
                     "--video",
-                    self.master.mkv[0],
+                    mkv_tmp,
                     "--automation",
                     "kara-templater.lua",
                     "--loglevel",
                     aegisub_cli_loglevel,
-                    f"{self.master.folder}\\ass\\.{filename}",
-                    f"{self.master.folder}\\ass\\{filename}",
+                    f"{self.master.folder}\\ass\\.{karaoke_tmp}",
+                    f"{self.master.folder}\\ass\\.{karaoke_out}",
                     "Apply karaoke template",
                 ]
                 process = subprocess.Popen(
@@ -646,19 +663,25 @@ class ASSGenerate:
                     print(line, end="")
                 process.wait()
                 self.clean_karaoke(
-                    f"{self.master.folder}\\ass\\{filename}", scriptinfo_language[index]
+                    f"{self.master.folder}\\ass\\.{karaoke_out}",
+                    f"{self.master.folder}\\ass\\{filename}",
+                    scriptinfo_language[index],
                 )
-                os.remove(f"{self.master.folder}\\ass\\.{filename}")
+                os.remove(f"{self.master.folder}\\ass\\.{karaoke_tmp}")
+                os.remove(f"{self.master.folder}\\ass\\.{karaoke_out}")
                 self.results.append(f"{self.master.folder}\\ass\\{filename}")
+        os.remove(mkv_tmp)
 
-    def clean_karaoke(self, file_path: str, script_info_language: str):
+    def clean_karaoke(
+        self, file_path: str, output_path: str, script_info_language: str
+    ):
         content = ""
         with open(file_path, "r", encoding="utf-8-sig") as file:
             content = file.read()
         content = self.clean_scriptinfo(content, script_info_language)
         content = self.clean_garbage(content)
         content = self.clean_furigana(content)
-        with open(file_path, "w", encoding="utf-8-sig") as file:
+        with open(output_path, "w", encoding="utf-8-sig") as file:
             file.write(content)
 
     # 保存文件
@@ -1297,7 +1320,9 @@ class App(Tk):
                 if font_path:
                     self.log(f"子集化字体：{font}")
                     randomstr = "".join(
-                        random.choice(string.ascii_letters + string.digits)
+                        random.choice(
+                            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+                        )
                         for _ in range(8)
                     )
                     replacedict[font] = f"{fontsubset_warning}{randomstr}"
