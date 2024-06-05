@@ -951,7 +951,7 @@ class App(Tk):
         self.button = ctk.CTkButton(
             self,
             text="开始",
-            command=_start,
+            command=self.start,
             hover=False,
             font=self.font,
             fg_color=opacity(opacity=0.9),
@@ -998,6 +998,8 @@ class App(Tk):
         index = format.index(key)
         content = content.split(",")
         value = content[index]
+        if key == "Text":
+            value = ",".join(content[index:])
         value = re.sub(r"^ ", "", value)
         return value
 
@@ -1010,8 +1012,6 @@ class App(Tk):
         multiple: bool = True,
     ):
         box.configure(state="normal")
-        if not multiple or len(getattr(self, files)) == 0:
-            box.delete(1.0, ctk.END)
         _files = event.data
         if "{" not in _files:
             _files = f"{{{_files}}}"
@@ -1026,9 +1026,8 @@ class App(Tk):
             if not multiple:
                 setattr(self, files, [])
             getattr(self, files).append(file)
-            box.insert(
-                ctk.END, file + "\n" if index != len(getattr(self, files)) - 1 else file
-            )
+        box.delete(1.0, ctk.END)
+        box.insert(ctk.END, "\n".join(getattr(self, files)))
         box.yview(ctk.END)
         box.configure(state="disabled")
 
@@ -1044,6 +1043,7 @@ class App(Tk):
         self.logbox.insert(ctk.END, text + "\n")
         self.logbox.yview(ctk.END)
         self.logbox.configure(state="disabled")
+        print(text)
 
     def getassfonts(self) -> dict:
         assfont = ASSFont(master=self)
@@ -1261,7 +1261,8 @@ class App(Tk):
     # 开始
     def start(self):
         self.log(f"当前设置：{self.values}")
-        self.log(f"mkv: {self.mkv[0]}")
+        mkv = self.mkv[0] if len(self.mkv) > 0 else ""
+        self.log(f"mkv: {mkv}")
         self.log(f"ass: {self.files}")
         if self.values["usecache"]:
             self.log(f"使用缓存数据")
@@ -1326,15 +1327,20 @@ class App(Tk):
                         for _ in range(8)
                     )
                     replacedict[font] = f"{fontsubset_warning}{randomstr}"
+                    real_fontpath = f"{self.folder}\\result\\{font} - {randomstr}.ttf"
                     self.subset(
                         font_path,
                         content,
                         replacedict[font],
                         f"{self.folder}\\result\\{font} - {randomstr}.ttf",
                     )
-                    real_fontpaths.append(
-                        f"{self.folder}\\result\\{font} - {randomstr}.ttf"
-                    )
+                    real_fontpaths.append(real_fontpath)
+                    with open(
+                        f"{self.folder}\\result\\.{font}.txt",
+                        "w",
+                        encoding="utf-8-sig",
+                    ) as file:
+                        file.write(content)
                 else:
                     self.log(f'※"{font}" 的字体文件未能找到。')
                     return
@@ -1357,10 +1363,9 @@ class App(Tk):
                     return
             self.log(f"字幕字体处理完毕。共 {len(fonts)} 个字体。")
         # 混流
-        if len(self.mkv) != 0:
+        if len(mkv) != 0:
             self.asss = sorted(self.asss, key=lambda x: os.path.basename(x))
             self.log(f"开始自动混流")
-            mkv = self.mkv[0]
             mkvmerge_path = self.getconfig("mkvmerge_path")
             title = re.sub(r"\.mkv$", "", os.path.basename(mkv))
             filename_ext = self.getconfig("filename_ext")
