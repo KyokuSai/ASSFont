@@ -8,8 +8,7 @@ from fontTools.ttLib import TTFont
 from fontTools import subset
 import random
 from PIL import Image
-import requests, subprocess
-
+import requests, subprocess, threading
 
 class Tk(ctk.CTk, TkinterDnD.DnDWrapper):
     def __init__(self, *args, **kwargs):
@@ -944,14 +943,15 @@ class App(Tk):
 
         def _start():
             try:
-                self.start()
+                task_thread = threading.Thread(target=self.start)
+                task_thread.start()
             except Exception:
                 sys.excepthook(*sys.exc_info())
 
         self.button = ctk.CTkButton(
             self,
             text="开始",
-            command=self.start,
+            command=_start,
             hover=False,
             font=self.font,
             fg_color=opacity(opacity=0.9),
@@ -1037,7 +1037,7 @@ class App(Tk):
         elif len(self.files) > 1:
             self.assgenerate_check.toggle(master=self, value=False)
             self.assgenerate_check.getself().configure(state="disabled")
-
+        
     def log(self, text: str):
         self.logbox.configure(state="normal")
         self.logbox.insert(ctk.END, text + "\n")
@@ -1458,7 +1458,6 @@ class App(Tk):
         self.filebox.insert(ctk.END, "拖入字幕文件")
         self.filebox.yview(ctk.END)
         self.filebox.configure(state="disabled")
-
 
 if __name__ == "__main__":
     app = App()
