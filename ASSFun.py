@@ -4,11 +4,12 @@ import re, json
 from functools import partial
 import os, sys
 import shutil
-from fontTools.ttLib import TTFont
+from fontTools.ttLib import TTFont, TTCollection
 from fontTools import subset
 import random
 from PIL import Image
 import requests, subprocess
+import io, threading
 
 
 class Tk(ctk.CTk, TkinterDnD.DnDWrapper):
@@ -224,8 +225,12 @@ class ConfigWindowFrame(ctk.CTkScrollableFrame):
             "assjpntrack_symbol": "混流字幕轨道判定为日文的标识符",
             "assjpntrack_lang": "[日本語]混流字幕轨道的语言(中文为zh日文为ja)",
             "assjpntrack_name": "[日本語]混流字幕轨道的名称",
+            "assengtrack_symbol": "混流字幕轨道判定为英文的标识符",
+            "assengtrack_lang": "[ENG]混流字幕轨道的语言(英文为en)",
+            "assengtrack_name": "[ENG]混流字幕轨道的名称",
             "asstrackname_separator": "混流字幕轨道名称分割符\n(在字幕文件名有.style.ass时在名称后添加/分割符style/)",
             "assmultistyle_defaulttrack": "混流字幕轨道有多style时判定默认轨道的style名",
+            "optional_styles": "特殊样式保留，指定样式在清理样式时保留，用,分割",
             "fontsubset_warning": "子集化字体之后添加的警告标识(作用于字体名称及附件名称)",
             "clean_scriptinfo": "开启后按照设置清理 Script Info 信息",
             "scriptinfo": "在清理 Script Info 时，要设置为什么值\n如果你需要的话可以使用{LANGUAGE}来表示语言信息",
@@ -269,6 +274,7 @@ class ConfigWindow(ctk.CTkToplevel):
         self.minsize(800, 600)
         self.title("ASSFont 设置 - KyokuSai")
         self.after(250, lambda: self.iconbitmap(resource_path("favicon.ico")))
+        self.after(150, lambda: self.focus())
         self.font = master.font
         self.config = master.config
         self.getconfig = master.getconfig
@@ -286,9 +292,11 @@ class ConfigWindow(ctk.CTkToplevel):
 class ASSGenerate:
     def __init__(self, master):
         self.assoriginal_filename = ""
+        self.asseng_filename = ""
         self.assoriginal = ""
         self.assoriginal_cht = ""
         self.assoriginal_jpn = ""
+        self.assengoriginal = ""
         self.asschss = []
         self.asschts = []
         self.assjpns = []
@@ -300,6 +308,12 @@ class ASSGenerate:
         self.assoriginal_filename = os.path.basename(assfile)
         with open(assfile, "r", encoding="utf-8-sig") as file:
             self.assoriginal = file.read()
+
+    # 读取英语字幕文件
+    def readengfile(self, assfile: str):
+        self.asseng_filename = os.path.basename(assfile)
+        with open(assfile, "r", encoding="utf-8-sig") as file:
+            self.assengoriginal = file.read()
 
     # 清理 Script Info
     def clean_scriptinfo(self, content: str, language: str = "") -> str:
@@ -412,11 +426,14 @@ class ASSGenerate:
         stylestring = re.search(
             r"^(Style:[\s\S\n]+?)\n(?=\[)", content, re.MULTILINE
         ).group(1)
-        stylestring = re.sub("\n+", "\n", f"{stylestring}\n")[:-1]
         assstyles = self.master.getconfig("assstyles")
         for _, _assstyles in assstyles.items():
             for assstyle, assstylestring in _assstyles.items():
-                if assstylestring == stylestring:
+                assstylestrings = assstylestring.split("\n")
+                if all(
+                    _assstylestring in stylestring
+                    for _assstylestring in assstylestrings
+                ):
                     return assstyle
         return None
 
@@ -431,6 +448,16 @@ class ASSGenerate:
         elif "JPN" in lang.upper():
             lang = "JPN"
         stylestring += assstyles[lang][style]
+        optional_styles: str = self.master.getconfig("optional_styles")
+        optional_styles = optional_styles.split(",")
+        for optional_style in optional_styles:
+            _stylestring = re.search(
+                f"^(Style: ?{re.escape(optional_style)},.+?)$",
+                content,
+                flags=re.MULTILINE,
+            )
+            if _stylestring:
+                stylestring += f"\n{_stylestring.group(1)}"
         stylestring += "\n\n"
         content = re.sub(
             r"^\[V4\+ Styles\][\s\S\n]+?\n(?=\[)",
@@ -686,8 +713,18 @@ class ASSGenerate:
 
     # 保存文件
     def savefiles(self):
-        if len(self.results) > 0:
+        if len(self.assengoriginal) > 0:
+            filename = self.asseng_filename
+            with open(
+                f"{self.master.folder}\\ass\\{filename}", "w", encoding="utf-8-sig"
+            ) as file:
+                file.write(self.assengoriginal)
+            self.results.append(f"{self.master.folder}\\ass\\{filename}")
+
+        _generate_karaoke = self.master.getconfig("generate_karaoke")
+        if _generate_karaoke:
             return
+
         if os.path.exists(f"{self.master.folder}\\ass"):
             shutil.rmtree(f"{self.master.folder}\\ass")
         os.makedirs(f"{self.master.folder}\\ass")
@@ -830,7 +867,10 @@ class App(Tk):
         self.config_file = os.path.join(self.folder, "data\\config.json")
         self.assstyles = {}
         self.assstyles_file = os.path.join(self.folder, "data\\assstyles.json")
+        ctk.FontManager.load_font(resource_path("NotoSansSC-Medium.otf"))
         self.font = ctk.CTkFont(family="NotoSansSC-Medium", size=18, weight="normal")
+
+        row = 0
 
         self.mkv = []
         self.mkvbox = ctk.CTkTextbox(
@@ -848,7 +888,7 @@ class App(Tk):
             border_spacing=0,
         )
         self.mkvbox.grid(
-            row=0, column=0, padx=16, pady=(10, 5), sticky="ew", columnspan=3
+            row=row, column=0, padx=16, pady=(10, 5), sticky="ew", columnspan=3
         )
         self.mkvbox.drop_target_register(DND_ALL)
         self.mkvbox.dnd_bind(
@@ -863,6 +903,7 @@ class App(Tk):
         )
         self.mkvbox.insert(ctk.END, "拖入mkv文件(如果要混流)")
         self.mkvbox.configure(state="disabled")
+        row = row + 1
 
         self.files = []
         self.asss = []
@@ -881,7 +922,7 @@ class App(Tk):
             border_spacing=0,
         )
         self.filebox.grid(
-            row=1, column=0, padx=16, pady=(5, 5), sticky="ew", columnspan=3
+            row=row, column=0, padx=16, pady=(5, 5), sticky="ew", columnspan=3
         )
         self.filebox.drop_target_register(DND_ALL)
         self.filebox.dnd_bind(
@@ -889,16 +930,51 @@ class App(Tk):
         )
         self.filebox.insert(ctk.END, "拖入字幕文件")
         self.filebox.configure(state="disabled")
+        row = row + 1
+
+        self.eng = []
+        self.engbox = ctk.CTkTextbox(
+            self,
+            height=25,
+            text_color="#FFFFFF",
+            fg_color="#666666",
+            border_color="#FFFFFF",
+            scrollbar_button_color="#DDDDDD",
+            scrollbar_button_hover_color="#EEEEEE",
+            font=self.font,
+            wrap="none",
+            corner_radius=4,
+            border_width=2,
+            border_spacing=0,
+        )
+        self.engbox.grid(
+            row=row, column=0, padx=16, pady=(10, 5), sticky="ew", columnspan=3
+        )
+        self.engbox.drop_target_register(DND_ALL)
+        self.engbox.dnd_bind(
+            "<<Drop>>",
+            partial(
+                self.file_drop,
+                box=self.engbox,
+                format="ass",
+                files="eng",
+                multiple=False,
+            ),
+        )
+        self.engbox.insert(ctk.END, "拖入单独英语字幕文件(如果有)")
+        self.engbox.configure(state="disabled")
+        row = row + 1
 
         self.values = {}
         _check = Check(self, key="assgenerate", label="字幕生成", default=False)
         self.assgenerate_check = _check
-        _check.grid(row=2, column=0, padx=(16, 2), pady=(5, 0), sticky=ctk.N)
+        _check.grid(row=row, column=0, padx=(16, 2), pady=(5, 0), sticky=ctk.N)
         _check = Check(self, key="subset", label="子集化字体", default=True)
-        _check.grid(row=2, column=1, padx=(2, 2), pady=(5, 0), sticky=ctk.N)
+        _check.grid(row=row, column=1, padx=(2, 2), pady=(5, 0), sticky=ctk.N)
         _check = Check(self, key="usecache", label="使用缓存", default=True)
-        _check.grid(row=2, column=2, padx=(2, 16), pady=(5, 0), sticky=ctk.N)
+        _check.grid(row=row, column=2, padx=(2, 16), pady=(5, 0), sticky=ctk.N)
         self.cache_check = _check
+        row = row + 1
 
         self.logbox = ctk.CTkTextbox(
             self,
@@ -915,9 +991,10 @@ class App(Tk):
             state="disabled",
         )
         self.logbox.grid(
-            row=3, column=0, padx=16, pady=(10, 5), sticky="ew", columnspan=3
+            row=row, column=0, padx=16, pady=(10, 5), sticky="ew", columnspan=3
         )
-        self.grid_rowconfigure([3], weight=1)
+        self.grid_rowconfigure([row], weight=1)
+        row = row + 1
 
         self.button = ctk.CTkButton(
             self,
@@ -939,19 +1016,13 @@ class App(Tk):
             border_spacing=2,
         )
         self.button.grid(
-            row=4, column=0, padx=(16, 16), pady=(5, 10), sticky="nws", columnspan=1
+            row=row, column=0, padx=(16, 16), pady=(5, 10), sticky="nws", columnspan=1
         )
-
-        def _start():
-            try:
-                self.start()
-            except Exception:
-                sys.excepthook(*sys.exc_info())
 
         self.button = ctk.CTkButton(
             self,
             text="开始",
-            command=self.start,
+            command=self.startbythreading,
             hover=False,
             font=self.font,
             fg_color=opacity(opacity=0.9),
@@ -962,7 +1033,7 @@ class App(Tk):
             border_spacing=2,
         )
         self.button.grid(
-            row=4,
+            row=row,
             column=0,
             padx=(16 + 22 + 2 * 2 + 12, 16),
             pady=(5, 10),
@@ -992,6 +1063,18 @@ class App(Tk):
             os.environ["HTTP_PROXY"] = proxy_address
             os.environ["HTTPS_PROXY"] = proxy_address
             self.log(f"使用代理：{proxy_address}")
+
+    def startbythreading(self):
+        def _start():
+            # self.start()
+            try:
+                self.start()
+            except Exception as e:
+                print(e)
+                sys.excepthook(*sys.exc_info())
+
+        task_thread = threading.Thread(target=_start)
+        task_thread.start()
 
     def get_assformat_by_key(self, format: str, content: str, key: str) -> str:
         format = format.replace(" ", "").split(",")
@@ -1069,6 +1152,18 @@ class App(Tk):
     def generatecache(self):
         self.cache = {}
 
+        def getName(names, nameID, platformID, platEncID, langID=None):
+            namerecords = []
+            for namerecord in names.names:
+                if (
+                    namerecord.nameID == nameID
+                    and namerecord.platformID == platformID
+                    and namerecord.platEncID == platEncID
+                ):
+                    if langID is None or namerecord.langID == langID:
+                        namerecords.append(namerecord)
+            return namerecords
+
         font_dir = os.path.join(os.environ.get("SystemRoot", "C:\\"), "Fonts")
         font_paths = []
         for root, _, files in os.walk(font_dir):  # 有一些字体是在子文件夹中
@@ -1077,20 +1172,33 @@ class App(Tk):
                 font_paths.append(file_path)
         for font_path in font_paths:
             filename: str = os.path.basename(font_path)
-            if filename.lower().endswith(".ttf") or filename.lower().endswith(".otf"):
+            if filename.lower().endswith(tuple([".ttf", ".otf", ".ttc"])):
                 try:
-                    font = TTFont(font_path)
-                    names = font["name"]
-                    names = [  # 所有可能的名称
-                        names.getName(1, 3, 1),
-                        names.getName(4, 3, 1),
-                        names.getName(1, 1, 25),
-                        names.getName(4, 1, 25),
-                    ]
-                    self.cache[font_path] = [
-                        name.toStr() for name in names if name is not None
-                    ]
-                    font.close()
+                    fonts = []
+                    if filename.lower().endswith(".ttc"):
+                        fonts = TTCollection(font_path).fonts
+                    else:
+                        font = TTFont(font_path)
+                        fonts = [font]
+                    for font in fonts:
+                        names = font["name"]
+                        names = [
+                            name.toStr()
+                            for name in [
+                                *getName(names, 1, 3, 1),
+                                *getName(names, 4, 3, 1),
+                                *getName(names, 1, 1, 25),
+                                *getName(names, 4, 3, 25),
+                            ]
+                            if name is not None
+                        ]
+                        names = list({name for name in names if name is not None})
+                        if font_path in self.cache:
+                            self.cache[font_path].extend(names)
+                        else:
+                            self.cache[font_path] = names
+                    if not filename.lower().endswith(".ttc"):
+                        font.close()
                 except Exception as e:
                     self.log(f"字体读取错误：{e}")
 
@@ -1137,6 +1245,9 @@ class App(Tk):
             "assjpntrack_symbol": "[JPN]",
             "assjpntrack_lang": "ja",
             "assjpntrack_name": "日本語-JPN",
+            "assengtrack_symbol": "[ENG]",
+            "assengtrack_lang": "en",
+            "assengtrack_name": "English-ENG",
             "asstrackname_separator": " - ",
             "assmultistyle_defaulttrack": "kawaii",
             "fontsubset_warning": "请勿安装此子集化字体 - ",
@@ -1149,6 +1260,7 @@ class App(Tk):
             "scriptinfo": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\nScaledBorderAndShadow: yes\nYCbCr Matrix: TV.709\nOriginal Script: 極彩花夢\nLanguage: {LANGUAGE}",
             "scriptinfo_language": "CHS_JPN,CHT_JPN,JPN",
             # "assstyles": {},
+            "optional_styles": "Sx-en,Ex-lrc | op_jp,Ex-lrc | op_zh,Ex-lrc | op_en,Ex-lrc | ed_jp,Ex-lrc | ed_zh,Ex-lrc | ed_en",
             "generate_cht": True,
             "generate_cht_styles": "Sx-zh,Rx-annotation",
             "generate_cht_keep_comment": True,
@@ -1221,11 +1333,35 @@ class App(Tk):
             self.configwindow.focus()
 
     # 子集化字体
-    def subset(self, fontfile: str, characters: str, newname: str, outputpath: str):
+    def subset(
+        self,
+        fontname: str,
+        fontfile: str,
+        characters: str,
+        newname: str,
+        outputpath: str,
+    ):
         subsetoptions = subset.Options(
             name_languages="*",
             # recalc_timestamp=True,
         )
+        if fontfile.lower().endswith(".ttc"):
+            ttc = TTCollection(fontfile)
+            ttfs = ttc.fonts
+            for ttf in ttfs:
+                names = ttf["name"]
+                names = [
+                    names.getName(1, 3, 1),
+                    names.getName(4, 3, 1),
+                    names.getName(1, 1, 25),
+                    names.getName(4, 1, 25),
+                ]
+                names = [name.toStr() for name in names if name is not None]
+                if fontname in names:
+                    fontfile = io.BytesIO()
+                    ttf.save(fontfile)
+                    fontfile.seek(0)
+                    break
         font = subset.load_font(fontfile, options=subsetoptions)  # 读取字体
 
         # 子集化字体
@@ -1303,6 +1439,24 @@ class App(Tk):
             assgenerate.generate_multistyle()
             self.log("进行卡拉OK模板化")
             assgenerate.generate_karaoke()
+            if len(self.eng) > 0:
+                self.log("处理英语字幕")
+                assgenerate.readengfile(self.eng[0])
+                assgenerate.assengoriginal = assgenerate.clean_scriptinfo(
+                    assgenerate.assengoriginal, language="ENG"
+                )
+                assgenerate.assengoriginal = assgenerate.clean_garbage(
+                    assgenerate.assengoriginal
+                )
+                assgenerate.assengoriginal = assgenerate.clean_furigana(
+                    assgenerate.assengoriginal
+                )
+                assgenerate.assengoriginal = assgenerate.clean_space(
+                    assgenerate.assengoriginal
+                )
+                assgenerate.assengoriginal = assgenerate.unicode_to_utf8(
+                    assgenerate.assengoriginal
+                )
             self.log("保存生成字幕")
             assgenerate.savefiles()
             self.files = assgenerate.results
@@ -1329,6 +1483,7 @@ class App(Tk):
                     replacedict[font] = f"{fontsubset_warning}{randomstr}"
                     real_fontpath = f"{self.folder}\\result\\{font} - {randomstr}.ttf"
                     self.subset(
+                        font,
                         font_path,
                         content,
                         replacedict[font],
@@ -1375,6 +1530,8 @@ class App(Tk):
             if not outputdir.endswith("\\"):
                 outputdir = f"{outputdir}\\"
             outputfile = f"{title} {filename_ext}.mkv"
+            if title.endswith("]"):
+                outputfile = f"{title}{filename_ext}.mkv"
             videotrack_lang = self.getconfig("videotrack_lang")
             videotrack_name = self.getconfig("videotrack_name")
             videotrack_resolution = self.getconfig("videotrack_resolution")
@@ -1390,6 +1547,9 @@ class App(Tk):
             assjpntrack_symbol = self.getconfig("assjpntrack_symbol")
             assjpntrack_lang = self.getconfig("assjpntrack_lang")
             assjpntrack_name = self.getconfig("assjpntrack_name")
+            assengtrack_symbol = self.getconfig("assengtrack_symbol")
+            assengtrack_lang = self.getconfig("assengtrack_lang")
+            assengtrack_name = self.getconfig("assengtrack_name")
             asstrackname_separator = self.getconfig("asstrackname_separator")
             assmultistyle_defaulttrack = self.getconfig("assmultistyle_defaulttrack")
             fontsubset_warning = self.getconfig("fontsubset_warning")
@@ -1398,6 +1558,8 @@ class App(Tk):
                 asschtjpntrack_symbol: [asschtjpntrack_lang, asschtjpntrack_name],
                 assjpntrack_symbol: [assjpntrack_lang, assjpntrack_name],
             }
+            if len(self.eng) > 0:
+                asstrack[assengtrack_symbol] = [assengtrack_lang, assengtrack_name]
             cmd = f'start "mkvmux" "{mkvmerge_path}" --ui-language zh_CN --priority lower '
             cmd += f'--output ^"{outputdir}{outputfile}^" '
             cmd += f"--no-subtitles --no-attachments "
@@ -1432,6 +1594,8 @@ class App(Tk):
                     )
                 if assmultistyle_defaulttrack == assstyle:
                     track_isdefault = ""
+                if track_lang == assengtrack_symbol:
+                    track_isdefault = ""
                 cmd += f'--language 0:{track_lang} --track-name ^"0:{realtrack_name}^" {track_isdefault}^"^(^" ^"{ass}^" ^"^)^" '
             if not fontsubset_warning.endswith(" ") and not fontsubset_warning.endswith(
                 "-"
@@ -1458,6 +1622,12 @@ class App(Tk):
         self.filebox.insert(ctk.END, "拖入字幕文件")
         self.filebox.yview(ctk.END)
         self.filebox.configure(state="disabled")
+        self.eng = []
+        self.engbox.configure(state="normal")
+        self.engbox.delete(1.0, ctk.END)
+        self.engbox.insert(ctk.END, "拖入单独英语字幕文件(如果有)")
+        self.engbox.yview(ctk.END)
+        self.engbox.configure(state="disabled")
 
 
 if __name__ == "__main__":
