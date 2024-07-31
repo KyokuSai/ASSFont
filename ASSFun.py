@@ -1,5 +1,6 @@
 from tkinterdnd2 import TkinterDnD, DND_ALL
 import customtkinter as ctk
+import tkinter
 import re, json
 from functools import partial
 import os, sys
@@ -279,7 +280,9 @@ class ConfigWindow(ctk.CTkToplevel):
         self.config = master.config
         self.getconfig = master.getconfig
         self.saveconfig = master.saveconfig
+        self.after(10, self._create_widgets)
 
+    def _create_widgets(self):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
@@ -287,6 +290,165 @@ class ConfigWindow(ctk.CTkToplevel):
             master=self, corner_radius=0, fg_color="transparent"
         )
         self.configwindowframe.grid(row=0, column=0, sticky="nsew")
+
+
+class CTkRadioButton(ctk.CTkRadioButton):
+    def __init__(self, master, **kwargs):
+        super().__init__(master, corner_radius=4, border_width_checked=3, **kwargs)
+        self._text_label.grid(row=0, column=0, sticky=ctk.NSEW)
+        self._canvas.grid(row=0, column=2, sticky=ctk.E)
+
+    def _create_bindings(self, sequence=None):
+        if sequence is None or sequence == "<Enter>":
+            self._canvas.bind("<Enter>", self._on_enter)
+            self._text_label.bind("<Enter>", self._on_enter)
+            self._bg_canvas.bind("<Enter>", self._on_enter)
+        if sequence is None or sequence == "<Leave>":
+            self._canvas.bind("<Leave>", self._on_leave)
+            self._text_label.bind("<Leave>", self._on_leave)
+            self._bg_canvas.bind("<Leave>", self._on_leave)
+        if sequence is None or sequence == "<Button-1>":
+            self._canvas.bind("<Button-1>", self.invoke)
+            self._text_label.bind("<Button-1>", self.invoke)
+            self._bg_canvas.bind("<Button-1>", self.invoke)
+
+    def _draw(self, no_color_updates=False):
+        super()._draw(no_color_updates)
+
+        requires_recoloring_1 = self._draw_engine.draw_rounded_rect_with_border(
+            self._apply_widget_scaling(self._radiobutton_width),
+            self._apply_widget_scaling(self._radiobutton_height),
+            self._apply_widget_scaling(self._corner_radius),
+            self._apply_widget_scaling(self._border_width_checked),
+        )
+        if self._check_state is True:
+            requires_recoloring_2 = self._draw_engine.draw_checkmark(
+                self._apply_widget_scaling(self._radiobutton_width),
+                self._apply_widget_scaling(self._radiobutton_height),
+                self._apply_widget_scaling(self._radiobutton_height * 0.58),
+            )
+        else:
+            requires_recoloring_2 = False
+            self._canvas.delete("checkmark")
+        if no_color_updates is False or requires_recoloring_1 or requires_recoloring_2:
+            self._bg_canvas.configure(bg=self._apply_appearance_mode(self._bg_color))
+            self._canvas.configure(bg=self._apply_appearance_mode(self._bg_color))
+            if self._check_state is True:
+                self._canvas.itemconfig(
+                    "inner_parts",
+                    outline=self._apply_appearance_mode(self._fg_color),
+                    fill=self._apply_appearance_mode(self._fg_color),
+                )
+                self._canvas.itemconfig(
+                    "border_parts",
+                    outline=self._apply_appearance_mode(self._fg_color),
+                    fill=self._apply_appearance_mode(self._fg_color),
+                )
+                if "create_line" in self._canvas.gettags("checkmark"):
+                    self._canvas.itemconfig(
+                        "checkmark",
+                        fill=self._apply_appearance_mode(self._border_color),
+                    )
+                else:
+                    self._canvas.itemconfig(
+                        "checkmark",
+                        fill=self._apply_appearance_mode(self._border_color),
+                    )
+            else:
+                self._canvas.itemconfig(
+                    "inner_parts",
+                    outline=self._apply_appearance_mode(self._bg_color),
+                    fill=self._apply_appearance_mode(self._bg_color),
+                )
+                self._canvas.itemconfig(
+                    "border_parts",
+                    outline=self._apply_appearance_mode(self._border_color),
+                    fill=self._apply_appearance_mode(self._border_color),
+                )
+            if self._state == tkinter.DISABLED:
+                self._text_label.configure(
+                    fg=(self._apply_appearance_mode(self._text_color_disabled))
+                )
+            else:
+                self._text_label.configure(
+                    fg=self._apply_appearance_mode(self._text_color)
+                )
+            self._text_label.configure(bg=self._apply_appearance_mode(self._bg_color))
+
+
+class SelectWindow(ctk.CTkToplevel):
+    def __init__(
+        self,
+        master,
+        title="",
+        selects=[],
+    ):
+        super().__init__(master)
+        self.title(title)
+        self.after(250, lambda: self.iconbitmap(resource_path("favicon.ico")))
+        self.after(150, lambda: self.focus())
+        self.font = master.font
+        self.selects = selects
+        self.result = None
+        self.after(10, self._create_widgets)
+        self.resizable(False, False)
+        self.grab_set()
+
+    def _create_widgets(self):
+        self.grid_columnconfigure((0, 1), weight=1)
+        self.rowconfigure(0, weight=1)
+
+        self.radio_var = ctk.IntVar(value=0)
+        row = 0
+        for index in range(0, len(self.selects)):
+            _radio = CTkRadioButton(
+                self,
+                text=self.selects[index],
+                variable=self.radio_var,
+                value=index,
+                font=self.font,
+                fg_color=opacity(opacity=0.9),
+                text_color="#FFFFFF",
+                hover_color=opacity(opacity=0.7),
+                border_color="#FFFFFF",
+            )
+            _radio.grid(row=row, column=0, padx=(20, 20), pady=(10, 0), sticky=ctk.NSEW)
+            row = row + 1
+
+        self._ok_button = ctk.CTkButton(
+            master=self,
+            width=200,
+            border_width=0,
+            text="确认",
+            font=self.font,
+            command=self._ok_event,
+            hover=False,
+            fg_color=opacity(opacity=0.9),
+            text_color="#FFFFFF",
+            corner_radius=6,
+            height=22,
+            border_spacing=2,
+        )
+        self._ok_button.grid(
+            row=row, column=0, columnspan=1, padx=20, pady=(10, 20), sticky="ew"
+        )
+
+    def _ok_event(self):
+        self.result = self.selects[self.radio_var.get()]
+        self.grab_release()
+        self.destroy()
+
+    def _on_closing(self):
+        self.grab_release()
+        self.destroy()
+
+    def _cancel_event(self):
+        self.grab_release()
+        self.destroy()
+
+    def get_result(self):
+        self.master.wait_window(self)
+        return self.result
 
 
 class ASSGenerate:
@@ -866,7 +1028,6 @@ class App(Tk):
         self.config = {}
         self.config_file = os.path.join(self.folder, "data\\config.json")
         self.assstyles = {}
-        self.assstyles_file = os.path.join(self.folder, "data\\assstyles.json")
         ctk.FontManager.load_font(resource_path("NotoSansSC-Medium.otf"))
         self.font = ctk.CTkFont(family="NotoSansSC-Medium", size=18, weight="normal")
 
@@ -1066,12 +1227,12 @@ class App(Tk):
 
     def startbythreading(self):
         def _start():
-            # self.start()
-            try:
-                self.start()
-            except Exception as e:
-                print(e)
-                sys.excepthook(*sys.exc_info())
+            self.start()
+            # try:
+            #     self.start()
+            # except Exception as e:
+            #     print(e)
+            #     sys.excepthook(*sys.exc_info())
 
         task_thread = threading.Thread(target=_start)
         task_thread.start()
@@ -1293,8 +1454,22 @@ class App(Tk):
         if key == "assstyles":
             if len(self.assstyles) != 0:
                 return self.assstyles
-            elif os.path.exists(self.assstyles_file):
-                with open(self.assstyles_file, "r", encoding="utf-8-sig") as json_file:
+            else:
+                assstyles = {}
+                for root, _, files in os.walk(os.path.join(self.folder, "assstyles")):
+                    for file in files:
+                        if file.endswith(".json"):
+                            assstyles[file] = os.path.join(root, file)
+                if len(assstyles) == 0:
+                    self.log("※样式表文件不存在")
+                    return {}
+                _select = SelectWindow(
+                    self,
+                    title="选择样式表",
+                    selects=[assstyle for assstyle, _ in assstyles.items()],
+                )
+                assstyles_file = assstyles[_select.get_result()]
+                with open(assstyles_file, "r", encoding="utf-8-sig") as json_file:
                     self.assstyles = json.load(json_file)
                 for _lang, _ in self.assstyles.items():
                     for _style, _ in self.assstyles[_lang].items():
@@ -1303,9 +1478,6 @@ class App(Tk):
                                 _style
                             ]
                 return self.assstyles
-            else:
-                self.log("※样式表文件不存在")
-                return {}
         elif key not in self.config:
             defaultconfig = self.initconfig(_return=True)
             mergedconfig = dict(self.config)
@@ -1628,6 +1800,7 @@ class App(Tk):
         self.engbox.insert(ctk.END, "拖入单独英语字幕文件(如果有)")
         self.engbox.yview(ctk.END)
         self.engbox.configure(state="disabled")
+        self.assstyles = {}
 
 
 if __name__ == "__main__":
