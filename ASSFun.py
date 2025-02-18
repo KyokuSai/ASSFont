@@ -1,3 +1,4 @@
+from pathlib import Path
 from tkinterdnd2 import TkinterDnD, DND_ALL
 import customtkinter as ctk
 import tkinter
@@ -462,17 +463,17 @@ class ASSGenerate:
         self.asschss = []
         self.asschts = []
         self.assjpns = []
-        self.master = master
-        self.results = []
+        self.master: ASSFunUI = master
+        self.results: list[Path] = []
 
     # 读取字幕文件
-    def readfile(self, assfile: str):
+    def readfile(self, assfile: Path):
         self.assoriginal_filename = os.path.basename(assfile)
         with open(assfile, "r", encoding="utf-8-sig") as file:
             self.assoriginal = file.read()
 
     # 读取英语字幕文件
-    def readengfile(self, assfile: str):
+    def readengfile(self, assfile: Path):
         self.asseng_filename = os.path.basename(assfile)
         with open(assfile, "r", encoding="utf-8-sig") as file:
             self.assengoriginal = file.read()
@@ -781,9 +782,9 @@ class ASSGenerate:
         if len(self.master.mkv) == 0:
             self.master.log("未指定mkv文件，跳过卡拉OK模板化")
             return
-        if os.path.exists(f"{self.master.folder}\\ass"):
-            shutil.rmtree(f"{self.master.folder}\\ass")
-        os.makedirs(f"{self.master.folder}\\ass")
+        if os.path.exists(self.master.folder / Path("ass")):
+            shutil.rmtree(self.master.folder / Path("ass"))
+        os.makedirs(self.master.folder / Path("ass"))
 
         generate_language: str = self.master.getconfig("generate_language")
         generate_language = generate_language.split(",")
@@ -795,7 +796,7 @@ class ASSGenerate:
             )
             for _ in range(8)
         )
-        mkv_tmp = f"{self.master.folder}\\ass\\{mkv_tmp}.mkv"
+        mkv_tmp = self.master.folder / Path("ass") / Path(f"{mkv_tmp}.mkv")
         shutil.copy(self.master.mkv[0], mkv_tmp)
         for index, asss in enumerate([self.asschss, self.asschts, self.assjpns]):
             for ass in asss:
@@ -819,7 +820,7 @@ class ASSGenerate:
                 karaoke_out = f"{karaoke_tmp}.out.ass"
                 karaoke_tmp = f"{karaoke_tmp}.ass"
                 with open(
-                    f"{self.master.folder}\\ass\\.{karaoke_tmp}",
+                    self.master.folder / Path("ass") / Path(f".{karaoke_tmp}"),
                     "w",
                     encoding="utf-8-sig",
                 ) as file:
@@ -836,8 +837,8 @@ class ASSGenerate:
                     "kara-templater.lua",
                     "--loglevel",
                     aegisub_cli_loglevel,
-                    f"{self.master.folder}\\ass\\.{karaoke_tmp}",
-                    f"{self.master.folder}\\ass\\.{karaoke_out}",
+                    str(self.master.folder / Path("ass") / Path(f".{karaoke_tmp}")),
+                    str(self.master.folder / Path("ass") / Path(f".{karaoke_out}")),
                     "Apply karaoke template",
                 ]
                 process = subprocess.Popen(
@@ -852,13 +853,13 @@ class ASSGenerate:
                     print(line, end="")
                 process.wait()
                 self.clean_karaoke(
-                    f"{self.master.folder}\\ass\\.{karaoke_out}",
-                    f"{self.master.folder}\\ass\\{filename}",
+                    self.master.folder / Path("ass") / Path(f".{karaoke_out}"),
+                    self.master.folder / Path("ass") / Path(filename),
                     scriptinfo_language[index],
                 )
-                os.remove(f"{self.master.folder}\\ass\\.{karaoke_tmp}")
-                os.remove(f"{self.master.folder}\\ass\\.{karaoke_out}")
-                self.results.append(f"{self.master.folder}\\ass\\{filename}")
+                os.remove(self.master.folder / Path("ass") / Path(f".{karaoke_tmp}"))
+                os.remove(self.master.folder / Path("ass") / Path(f".{karaoke_out}"))
+                self.results.append(self.master.folder / Path("ass") / Path(filename))
         os.remove(mkv_tmp)
 
     def clean_karaoke(
@@ -878,18 +879,20 @@ class ASSGenerate:
         if len(self.assengoriginal) > 0:
             filename = self.asseng_filename
             with open(
-                f"{self.master.folder}\\ass\\{filename}", "w", encoding="utf-8-sig"
+                self.master.folder / Path("ass") / Path(filename),
+                "w",
+                encoding="utf-8-sig",
             ) as file:
                 file.write(self.assengoriginal)
-            self.results.append(f"{self.master.folder}\\ass\\{filename}")
+            self.results.append(self.master.folder / Path("ass") / Path(filename))
 
         _generate_karaoke = self.master.getconfig("generate_karaoke")
         if _generate_karaoke:
             return
 
-        if os.path.exists(f"{self.master.folder}\\ass"):
-            shutil.rmtree(f"{self.master.folder}\\ass")
-        os.makedirs(f"{self.master.folder}\\ass")
+        if os.path.exists(self.master.folder / Path("ass")):
+            shutil.rmtree(self.master.folder / Path("ass"))
+        os.makedirs(self.master.folder / Path("ass"))
 
         generate_language: str = self.master.getconfig("generate_language")
         generate_language = generate_language.split(",")
@@ -906,10 +909,12 @@ class ASSGenerate:
                     filename,
                 )
                 with open(
-                    f"{self.master.folder}\\ass\\{filename}", "w", encoding="utf-8-sig"
+                    self.master.folder / Path("ass") / Path(filename),
+                    "w",
+                    encoding="utf-8-sig",
                 ) as file:
                     file.write(ass)
-                self.results.append(f"{self.master.folder}\\ass\\{filename}")
+                self.results.append(self.master.folder / Path("ass") / Path(filename))
 
 
 class ASSFont:
@@ -921,7 +926,7 @@ class ASSFont:
         self.get_assformat_by_key = master.get_assformat_by_key
 
     # 读取字幕文件
-    def readfile(self, assfile: str):
+    def readfile(self, assfile: Path):
         with open(assfile, "r", encoding="utf-8-sig") as file:
             self.filecontent = file.read()
 
@@ -1006,7 +1011,7 @@ class ASSFont:
             self.addfont(self.styles[default_style], content)
 
 
-class App(Tk):
+class ASSFunUI(Tk):
     def __init__(self):
         super().__init__()
 
@@ -1023,20 +1028,22 @@ class App(Tk):
             self.folder = os.path.abspath(os.path.dirname(sys.executable))
         else:
             self.folder = os.path.abspath(os.path.dirname(__file__))
+        self.folder = Path(self.folder)
         self.cache = {}
-        self.cache_file = os.path.join(self.folder, "data\\cache.json")
+        self.cache_file = self.folder / Path("data") / Path("cache.json")
         self.config = {}
-        self.config_file = os.path.join(self.folder, "data\\config.json")
+        self.config_file = self.folder / Path("data") / Path("config.json")
         self.assstyles = {}
         ctk.FontManager.load_font(resource_path("NotoSansSC-Medium.otf"))
         self.font = ctk.CTkFont(family="NotoSansSC-Medium", size=18, weight="normal")
+        self.mkv: list[Path] = []
+        self.files: list[Path] = []
+        self.asss: list[Path] = []
+        self.eng: list[Path] = []
+        self.values = {}
+        self.configwindow = None
 
-        row = 0
-
-        self.mkv = []
-        self.mkvbox = ctk.CTkTextbox(
-            self,
-            height=25,
+        self.style_CTkTextbox = dict(
             text_color="#FFFFFF",
             fg_color="#666666",
             border_color="#FFFFFF",
@@ -1048,6 +1055,13 @@ class App(Tk):
             border_width=2,
             border_spacing=0,
         )
+        self.after(10, self._create_widgets)
+        self.after(250, self._init)
+
+    def _create_widgets(self):
+        row = 0
+
+        self.mkvbox = ctk.CTkTextbox(self, height=25, **self.style_CTkTextbox)
         self.mkvbox.grid(
             row=row, column=0, padx=16, pady=(10, 5), sticky="ew", columnspan=3
         )
@@ -1066,22 +1080,7 @@ class App(Tk):
         self.mkvbox.configure(state="disabled")
         row = row + 1
 
-        self.files = []
-        self.asss = []
-        self.filebox = ctk.CTkTextbox(
-            self,
-            height=175,
-            text_color="#FFFFFF",
-            fg_color="#666666",
-            border_color="#FFFFFF",
-            scrollbar_button_color="#DDDDDD",
-            scrollbar_button_hover_color="#EEEEEE",
-            font=self.font,
-            wrap="none",
-            corner_radius=4,
-            border_width=2,
-            border_spacing=0,
-        )
+        self.filebox = ctk.CTkTextbox(self, height=175, **self.style_CTkTextbox)
         self.filebox.grid(
             row=row, column=0, padx=16, pady=(5, 5), sticky="ew", columnspan=3
         )
@@ -1093,21 +1092,7 @@ class App(Tk):
         self.filebox.configure(state="disabled")
         row = row + 1
 
-        self.eng = []
-        self.engbox = ctk.CTkTextbox(
-            self,
-            height=25,
-            text_color="#FFFFFF",
-            fg_color="#666666",
-            border_color="#FFFFFF",
-            scrollbar_button_color="#DDDDDD",
-            scrollbar_button_hover_color="#EEEEEE",
-            font=self.font,
-            wrap="none",
-            corner_radius=4,
-            border_width=2,
-            border_spacing=0,
-        )
+        self.engbox = ctk.CTkTextbox(self, height=25, **self.style_CTkTextbox)
         self.engbox.grid(
             row=row, column=0, padx=16, pady=(10, 5), sticky="ew", columnspan=3
         )
@@ -1126,7 +1111,6 @@ class App(Tk):
         self.engbox.configure(state="disabled")
         row = row + 1
 
-        self.values = {}
         _check = Check(self, key="assgenerate", label="字幕生成", default=False)
         self.assgenerate_check = _check
         _check.grid(row=row, column=0, padx=(16, 2), pady=(5, 0), sticky=ctk.N)
@@ -1202,6 +1186,7 @@ class App(Tk):
             columnspan=3,
         )
 
+    def _init(self):
         self.log("-- 日志记录 --")
 
         def global_exception(exc_type, exc_value, exc_traceback):
@@ -1216,7 +1201,6 @@ class App(Tk):
         sys.excepthook = global_exception
         self.getcache(init=True)
         self.setconfig()
-        self.configwindow = None
 
         proxy_port = self.getconfig("proxy")
         if proxy_port != "0":
@@ -1269,9 +1253,9 @@ class App(Tk):
                 continue
             if not multiple:
                 setattr(self, files, [])
-            getattr(self, files).append(file)
+            getattr(self, files).append(Path(file))
         box.delete(1.0, ctk.END)
-        box.insert(ctk.END, "\n".join(getattr(self, files)))
+        box.insert(ctk.END, "\n".join(map(str, getattr(self, files))))
         box.yview(ctk.END)
         box.configure(state="disabled")
 
@@ -1378,8 +1362,8 @@ class App(Tk):
 
     # 保存字体信息
     def savecache(self):
-        if not os.path.exists(f"{self.folder}\\data"):
-            os.makedirs(f"{self.folder}\\data")
+        if not os.path.exists(self.folder / Path("data")):
+            os.makedirs(self.folder / Path("data"))
         if os.path.exists(self.cache_file):
             os.remove(self.cache_file)
         with open(self.cache_file, "w", encoding="utf-8-sig") as json_file:
@@ -1456,7 +1440,7 @@ class App(Tk):
                 return self.assstyles
             else:
                 assstyles = {}
-                for root, _, files in os.walk(os.path.join(self.folder, "assstyles")):
+                for root, _, files in os.walk(self.folder / Path("assstyles")):
                     for file in files:
                         if file.endswith(".json"):
                             assstyles[file] = os.path.join(root, file)
@@ -1490,8 +1474,8 @@ class App(Tk):
 
     # 保存程序设置
     def saveconfig(self):
-        if not os.path.exists(f"{self.folder}\\data"):
-            os.makedirs(f"{self.folder}\\data")
+        if not os.path.exists(self.folder / Path("data")):
+            os.makedirs(self.folder / Path("data"))
         if os.path.exists(self.config_file):
             os.remove(self.config_file)
         with open(self.config_file, "w", encoding="utf-8-sig") as json_file:
@@ -1560,8 +1544,14 @@ class App(Tk):
         with open(filepath, "r", encoding="utf-8-sig") as file:
             file_content = file.read()
 
-        for key, value in replacedict.items():
-            file_content = file_content.replace(key, value)
+        part1 = re.search(r"([\s\S]+)\n\[Events\]\n", file_content, re.MULTILINE)
+        part1 = part1.group(1)
+        part2 = re.search(r"\n\[Events\]\n([\s\S]+)", file_content, re.MULTILINE)
+        part2 = part2.group(1)
+        for key in sorted(replacedict, key=lambda n: len(n), reverse=True):
+            part1 = part1.replace(key, replacedict[key])
+            part2 = part2.replace(f"\\fn{key}", f"\\fn{replacedict[key]}")
+            file_content = f"{part1}\n[Events]\n{part2}"
 
         with open(outputpath, "w", encoding="utf-8-sig") as file:
             file.write(file_content)
@@ -1634,9 +1624,9 @@ class App(Tk):
             self.files = assgenerate.results
         # 字体处理
         fonts = self.getassfonts()
-        if os.path.exists(f"{self.folder}\\result"):
-            shutil.rmtree(f"{self.folder}\\result")
-        os.makedirs(f"{self.folder}\\result")
+        if os.path.exists(self.folder / Path("result")):
+            shutil.rmtree(self.folder / Path("result"))
+        os.makedirs(self.folder / Path("result"))
         real_fontpaths = []
         if self.values["subset"]:
             fontsubset_warning = self.getconfig("fontsubset_warning")
@@ -1653,17 +1643,19 @@ class App(Tk):
                         for _ in range(8)
                     )
                     replacedict[font] = f"{fontsubset_warning}{randomstr}"
-                    real_fontpath = f"{self.folder}\\result\\{font} - {randomstr}.ttf"
+                    real_fontpath = (
+                        self.folder / Path("result") / Path(f"{font} - {randomstr}.ttf")
+                    )
                     self.subset(
                         font,
                         font_path,
                         content,
                         replacedict[font],
-                        f"{self.folder}\\result\\{font} - {randomstr}.ttf",
+                        real_fontpath,
                     )
                     real_fontpaths.append(real_fontpath)
                     with open(
-                        f"{self.folder}\\result\\.{font}.txt",
+                        self.folder / Path("result") / Path(f".{font}.txt"),
                         "w",
                         encoding="utf-8-sig",
                     ) as file:
@@ -1674,7 +1666,7 @@ class App(Tk):
             for file in self.files:
                 filename = os.path.basename(file)
                 self.asssubsetfix(
-                    file, f"{self.folder}\\result\\{filename}", replacedict
+                    file, self.folder / Path("result") / Path(filename), replacedict
                 )
             self.log(f"字幕字体处理完毕。共 {len(fonts)} 个字体。")
         else:
@@ -1683,14 +1675,18 @@ class App(Tk):
                 self.log(f"查找字体：{font}")
                 font_path, font_file = self.getfontfile(font)
                 if font_path:
-                    shutil.copy(font_path, f"{self.folder}\\result\\{font_file}")
-                    real_fontpaths.append(f"{self.folder}\\result\\{font_file}")
+                    shutil.copy(
+                        font_path, self.folder / Path("result") / Path(font_file)
+                    )
+                    real_fontpaths.append(
+                        self.folder / Path("result") / Path(font_file)
+                    )
                 else:
                     self.log(f'※"{font}" 的字体文件未能找到。')
                     return
             self.log(f"字幕字体处理完毕。共 {len(fonts)} 个字体。")
         # 混流
-        if len(mkv) != 0:
+        if mkv:
             self.asss = sorted(self.asss, key=lambda x: os.path.basename(x))
             self.log(f"开始自动混流")
             mkvmerge_path = self.getconfig("mkvmerge_path")
@@ -1704,28 +1700,30 @@ class App(Tk):
             outputfile = f"{title} {filename_ext}.mkv"
             if title.endswith("]"):
                 outputfile = f"{title}{filename_ext}.mkv"
-            videotrack_lang = self.getconfig("videotrack_lang")
-            videotrack_name = self.getconfig("videotrack_name")
-            videotrack_resolution = self.getconfig("videotrack_resolution")
-            audiotrack_delay = self.getconfig("audiotrack_delay")
-            audiotrack_lang = self.getconfig("audiotrack_lang")
-            audiotrack_name = self.getconfig("audiotrack_name")
-            asschsjpntrack_symbol = self.getconfig("asschsjpntrack_symbol")
-            asschsjpntrack_lang = self.getconfig("asschsjpntrack_lang")
-            asschsjpntrack_name = self.getconfig("asschsjpntrack_name")
-            asschtjpntrack_symbol = self.getconfig("asschtjpntrack_symbol")
-            asschtjpntrack_lang = self.getconfig("asschtjpntrack_lang")
-            asschtjpntrack_name = self.getconfig("asschtjpntrack_name")
-            assjpntrack_symbol = self.getconfig("assjpntrack_symbol")
-            assjpntrack_lang = self.getconfig("assjpntrack_lang")
-            assjpntrack_name = self.getconfig("assjpntrack_name")
-            assengtrack_symbol = self.getconfig("assengtrack_symbol")
-            assengtrack_lang = self.getconfig("assengtrack_lang")
-            assengtrack_name = self.getconfig("assengtrack_name")
-            asstrackname_separator = self.getconfig("asstrackname_separator")
-            assmultistyle_defaulttrack = self.getconfig("assmultistyle_defaulttrack")
-            fontsubset_warning = self.getconfig("fontsubset_warning")
-            asstrack = {
+            videotrack_lang: str = self.getconfig("videotrack_lang")
+            videotrack_name: str = self.getconfig("videotrack_name")
+            videotrack_resolution: str = self.getconfig("videotrack_resolution")
+            audiotrack_delay: str = self.getconfig("audiotrack_delay")
+            audiotrack_lang: str = self.getconfig("audiotrack_lang")
+            audiotrack_name: str = self.getconfig("audiotrack_name")
+            asschsjpntrack_symbol: str = self.getconfig("asschsjpntrack_symbol")
+            asschsjpntrack_lang: str = self.getconfig("asschsjpntrack_lang")
+            asschsjpntrack_name: str = self.getconfig("asschsjpntrack_name")
+            asschtjpntrack_symbol: str = self.getconfig("asschtjpntrack_symbol")
+            asschtjpntrack_lang: str = self.getconfig("asschtjpntrack_lang")
+            asschtjpntrack_name: str = self.getconfig("asschtjpntrack_name")
+            assjpntrack_symbol: str = self.getconfig("assjpntrack_symbol")
+            assjpntrack_lang: str = self.getconfig("assjpntrack_lang")
+            assjpntrack_name: str = self.getconfig("assjpntrack_name")
+            assengtrack_symbol: str = self.getconfig("assengtrack_symbol")
+            assengtrack_lang: str = self.getconfig("assengtrack_lang")
+            assengtrack_name: str = self.getconfig("assengtrack_name")
+            asstrackname_separator: str = self.getconfig("asstrackname_separator")
+            assmultistyle_defaulttrack: str = self.getconfig(
+                "assmultistyle_defaulttrack"
+            )
+            fontsubset_warning: str = self.getconfig("fontsubset_warning")
+            asstrack: dict[str, list[str, str]] = {
                 asschsjpntrack_symbol: [asschsjpntrack_lang, asschsjpntrack_name],
                 asschtjpntrack_symbol: [asschtjpntrack_lang, asschtjpntrack_name],
                 assjpntrack_symbol: [assjpntrack_lang, assjpntrack_name],
@@ -1751,7 +1749,7 @@ class App(Tk):
                     if _symbol in os.path.basename(ass):
                         track_lang = _value[0]
                         track_name = _value[1]
-                        is_unique = sum(_symbol in _item for _item in self.asss)
+                        is_unique = sum(_symbol in str(_item) for _item in self.asss)
                         if is_unique < 2:
                             track_isdefault = ""
                 realtrack_name = track_name
@@ -1804,5 +1802,5 @@ class App(Tk):
 
 
 if __name__ == "__main__":
-    app = App()
-    app.mainloop()
+    ui = ASSFunUI()
+    ui.mainloop()
