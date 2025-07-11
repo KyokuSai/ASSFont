@@ -211,7 +211,7 @@ class ConfigWindowFrame(ctk.CTkScrollableFrame):
 
         _options = {
             "mkvmerge_path": "mkvmerge路径(安装mkvtoolnix的同目录下)",
-            "filename_ext": "混流输出文件的视频属性标识",
+            "filename_ext": "混流输出文件的视频属性标识，用{res}代表视频轨垂直分辨率",
             "mkvoutputdir": "混流输出文件的路径(留空则与输入文件同目录)",
             "videotrack_lang": "混流视频轨道的语言设置(中文为zh日文为ja)",
             "videotrack_name": "混流视频轨道的名称",
