@@ -12,6 +12,7 @@ import random
 from PIL import Image
 import requests, subprocess
 import io, threading
+from pymediainfo import MediaInfo
 
 
 class Tk(ctk.CTk, TkinterDnD.DnDWrapper):
@@ -33,7 +34,7 @@ def rgb_to_hex(rgb_color):
 
 def opacity(color: str = "#FA4276", opacity: float = 0.0) -> str:
     rgb_color = hex_to_rgb(color)
-    new_rgb_color = tuple(int(c * opacity + 255 * (1 - opacity)) for c in rgb_color)
+    new_rgb_color = (int(c * opacity + 255 * (1 - opacity)) for c in rgb_color)
     new_color_str = rgb_to_hex(new_rgb_color)
     return new_color_str
 
@@ -214,7 +215,6 @@ class ConfigWindowFrame(ctk.CTkScrollableFrame):
             "mkvoutputdir": "混流输出文件的路径(留空则与输入文件同目录)",
             "videotrack_lang": "混流视频轨道的语言设置(中文为zh日文为ja)",
             "videotrack_name": "混流视频轨道的名称",
-            "videotrack_resolution": "混流视频轨道的分辨率",
             "audiotrack_lang": "混流音频轨道的语言设置(中文为zh日文为ja)",
             "audiotrack_name": "混流音频轨道的名称",
             "audiotrack_delay": "混流音频轨道的延迟(0则无延迟)",
@@ -383,13 +383,15 @@ class SelectWindow(ctk.CTkToplevel):
         master,
         title="",
         selects=[],
+        default=None,
     ):
         super().__init__(master)
         self.title(title)
         self.after(250, lambda: self.iconbitmap(resource_path("favicon.ico")))
         self.after(150, lambda: self.focus())
         self.font = master.font
-        self.selects = selects
+        self.selects = list(selects)
+        self.default = 0 if default is None else self.selects.index(default)
         self.result = None
         self.after(10, self._create_widgets)
         self.resizable(False, False)
@@ -399,7 +401,7 @@ class SelectWindow(ctk.CTkToplevel):
         self.grid_columnconfigure((0, 1), weight=1)
         self.rowconfigure(0, weight=1)
 
-        self.radio_var = ctk.IntVar(value=0)
+        self.radio_var = ctk.IntVar(value=self.default)
         row = 0
         for index in range(0, len(self.selects)):
             _radio = CTkRadioButton(
@@ -779,25 +781,28 @@ class ASSGenerate:
         if not _generate_karaoke:
             self.master.log("跳过卡拉OK模板化")
             return
+        _nomkv = False
         if len(self.master.mkv) == 0:
-            self.master.log("未指定mkv文件，跳过卡拉OK模板化")
-            return
-        if os.path.exists(self.master.folder / Path("ass")):
-            shutil.rmtree(self.master.folder / Path("ass"))
-        os.makedirs(self.master.folder / Path("ass"))
+            # self.master.log("未指定mkv文件，跳过卡拉OK模板化")
+            # return
+            _nomkv = True
+        if os.path.exists(self.master.folder / "ass"):
+            shutil.rmtree(self.master.folder / "ass")
+        os.makedirs(self.master.folder / "ass")
 
         generate_language: str = self.master.getconfig("generate_language")
         generate_language = generate_language.split(",")
         scriptinfo_language: str = self.master.getconfig("scriptinfo_language")
         scriptinfo_language = scriptinfo_language.split(",")
-        mkv_tmp = "".join(
-            random.choice(
-                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        if not _nomkv:
+            mkv_tmp = "".join(
+                random.choice(
+                    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+                )
+                for _ in range(8)
             )
-            for _ in range(8)
-        )
-        mkv_tmp = self.master.folder / Path("ass") / Path(f"{mkv_tmp}.mkv")
-        shutil.copy(self.master.mkv[0], mkv_tmp)
+            mkv_tmp = self.master.folder / "ass" / f"{mkv_tmp}.mkv"
+            shutil.copy(self.master.mkv[0], mkv_tmp)
         for index, asss in enumerate([self.asschss, self.asschts, self.assjpns]):
             for ass in asss:
                 filename = re.sub(
@@ -820,7 +825,7 @@ class ASSGenerate:
                 karaoke_out = f"{karaoke_tmp}.out.ass"
                 karaoke_tmp = f"{karaoke_tmp}.ass"
                 with open(
-                    self.master.folder / Path("ass") / Path(f".{karaoke_tmp}"),
+                    self.master.folder / "ass" / f".{karaoke_tmp}",
                     "w",
                     encoding="utf-8-sig",
                 ) as file:
@@ -829,16 +834,19 @@ class ASSGenerate:
                 aegisub_cli_loglevel: str = self.master.getconfig(
                     "aegisub_cli_loglevel"
                 )
-                command = [
-                    aegisub_cli_path,
-                    "--video",
-                    mkv_tmp,
+                command = [aegisub_cli_path]
+                if not _nomkv:
+                    command += [
+                        "--video",
+                        mkv_tmp,
+                    ]
+                command += [
                     "--automation",
                     "kara-templater.lua",
                     "--loglevel",
                     aegisub_cli_loglevel,
-                    str(self.master.folder / Path("ass") / Path(f".{karaoke_tmp}")),
-                    str(self.master.folder / Path("ass") / Path(f".{karaoke_out}")),
+                    str(self.master.folder / "ass" / f".{karaoke_tmp}"),
+                    str(self.master.folder / "ass" / f".{karaoke_out}"),
                     "Apply karaoke template",
                 ]
                 process = subprocess.Popen(
@@ -853,14 +861,15 @@ class ASSGenerate:
                     print(line, end="")
                 process.wait()
                 self.clean_karaoke(
-                    self.master.folder / Path("ass") / Path(f".{karaoke_out}"),
-                    self.master.folder / Path("ass") / Path(filename),
+                    self.master.folder / "ass" / f".{karaoke_out}",
+                    self.master.folder / "ass" / filename,
                     scriptinfo_language[index],
                 )
-                os.remove(self.master.folder / Path("ass") / Path(f".{karaoke_tmp}"))
-                os.remove(self.master.folder / Path("ass") / Path(f".{karaoke_out}"))
-                self.results.append(self.master.folder / Path("ass") / Path(filename))
-        os.remove(mkv_tmp)
+                os.remove(self.master.folder / "ass" / f".{karaoke_tmp}")
+                os.remove(self.master.folder / "ass" / f".{karaoke_out}")
+                self.results.append(self.master.folder / "ass" / filename)
+        if not _nomkv:
+            os.remove(mkv_tmp)
 
     def clean_karaoke(
         self, file_path: str, output_path: str, script_info_language: str
@@ -879,20 +888,20 @@ class ASSGenerate:
         if len(self.assengoriginal) > 0:
             filename = self.asseng_filename
             with open(
-                self.master.folder / Path("ass") / Path(filename),
+                self.master.folder / "ass" / filename,
                 "w",
                 encoding="utf-8-sig",
             ) as file:
                 file.write(self.assengoriginal)
-            self.results.append(self.master.folder / Path("ass") / Path(filename))
+            self.results.append(self.master.folder / "ass" / filename)
 
         _generate_karaoke = self.master.getconfig("generate_karaoke")
         if _generate_karaoke:
             return
 
-        if os.path.exists(self.master.folder / Path("ass")):
-            shutil.rmtree(self.master.folder / Path("ass"))
-        os.makedirs(self.master.folder / Path("ass"))
+        if os.path.exists(self.master.folder / "ass"):
+            shutil.rmtree(self.master.folder / "ass")
+        os.makedirs(self.master.folder / "ass")
 
         generate_language: str = self.master.getconfig("generate_language")
         generate_language = generate_language.split(",")
@@ -909,12 +918,12 @@ class ASSGenerate:
                     filename,
                 )
                 with open(
-                    self.master.folder / Path("ass") / Path(filename),
+                    self.master.folder / "ass" / filename,
                     "w",
                     encoding="utf-8-sig",
                 ) as file:
                     file.write(ass)
-                self.results.append(self.master.folder / Path("ass") / Path(filename))
+                self.results.append(self.master.folder / "ass" / filename)
 
 
 class ASSFont:
@@ -1023,16 +1032,15 @@ class ASSFunUI(Tk):
 
         self.grid_columnconfigure([0, 1, 2], weight=1)
 
-        self.folder = ""
         if getattr(sys, "frozen", False):
             self.folder = os.path.abspath(os.path.dirname(sys.executable))
         else:
             self.folder = os.path.abspath(os.path.dirname(__file__))
-        self.folder = Path(self.folder)
+        self.folder: Path = Path(self.folder)
         self.cache = {}
-        self.cache_file = self.folder / Path("data") / Path("cache.json")
+        self.cache_file = self.folder / "data" / "cache.json"
         self.config = {}
-        self.config_file = self.folder / Path("data") / Path("config.json")
+        self.config_file = self.folder / "data" / "config.json"
         self.assstyles = {}
         ctk.FontManager.load_font(resource_path("NotoSansSC-Medium.otf"))
         self.font = ctk.CTkFont(family="NotoSansSC-Medium", size=18, weight="normal")
@@ -1240,12 +1248,8 @@ class ASSFunUI(Tk):
         multiple: bool = True,
     ):
         box.configure(state="normal")
-        _files = event.data
-        if "{" not in _files:
-            _files = f"{{{_files}}}"
-            _files = re.sub(r" ([A-Z]:)", r"} \1", _files)
-            _files = re.sub(r" ([A-Z]:)", r" {\1", _files)
-        _files = re.findall(r"{([^{]+)}", _files)
+        matches = re.findall(r"\{(.*?)\}|([^\s]+)", event.data)
+        _files = [m[0] if m[0] else m[1] for m in matches]
         for index, file in enumerate(_files):
             if not file.lower().endswith(f".{format}"):
                 continue
@@ -1317,7 +1321,7 @@ class ASSFunUI(Tk):
                 font_paths.append(file_path)
         for font_path in font_paths:
             filename: str = os.path.basename(font_path)
-            if filename.lower().endswith(tuple([".ttf", ".otf", ".ttc"])):
+            if filename.lower().endswith((".ttf", ".otf", ".ttc")):
                 try:
                     fonts = []
                     if filename.lower().endswith(".ttc"):
@@ -1362,8 +1366,8 @@ class ASSFunUI(Tk):
 
     # 保存字体信息
     def savecache(self):
-        if not os.path.exists(self.folder / Path("data")):
-            os.makedirs(self.folder / Path("data"))
+        if not os.path.exists(self.folder / "data"):
+            os.makedirs(self.folder / "data")
         if os.path.exists(self.cache_file):
             os.remove(self.cache_file)
         with open(self.cache_file, "w", encoding="utf-8-sig") as json_file:
@@ -1373,11 +1377,10 @@ class ASSFunUI(Tk):
     def initconfig(self, _return: bool = False):
         config = {
             "mkvmerge_path": "D:/path/to/mkvmerge.exe",
-            "filename_ext": "[1080P][WEBRip][HEVC 10bit]",
+            "filename_ext": "[{res}P][WEBRip][HEVC 10bit]",
             "mkvoutputdir": "",
             "videotrack_lang": "ja",
             "videotrack_name": "WEBRip by KyokuSaiYume",
-            "videotrack_resolution": "1920x1080",
             "audiotrack_delay": "0",
             "audiotrack_lang": "ja",
             "audiotrack_name": "WEB-DL",
@@ -1402,7 +1405,7 @@ class ASSFunUI(Tk):
             "clean_space": True,
             "clean_all_space": False,
             "unicode_to_utf8": True,
-            "scriptinfo": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\nScaledBorderAndShadow: yes\nYCbCr Matrix: TV.709\nOriginal Script: 極彩花夢\nLanguage: {LANGUAGE}",
+            "scriptinfo": "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nLayoutResX: 1920\nLayoutResY: 1080\nWrapStyle: 0\nScaledBorderAndShadow: yes\nYCbCr Matrix: TV.709\nOriginal Script: 極彩花夢\nLanguage: {LANGUAGE}",
             "scriptinfo_language": "CHS_JPN,CHT_JPN,JPN",
             # "assstyles": {},
             "optional_styles": "Sx-en,Ex-lrc | op_jp,Ex-lrc | op_zh,Ex-lrc | op_en,Ex-lrc | ed_jp,Ex-lrc | ed_zh,Ex-lrc | ed_en",
@@ -1440,7 +1443,7 @@ class ASSFunUI(Tk):
                 return self.assstyles
             else:
                 assstyles = {}
-                for root, _, files in os.walk(self.folder / Path("assstyles")):
+                for root, _, files in os.walk(self.folder / "assstyles"):
                     for file in files:
                         if file.endswith(".json"):
                             assstyles[file] = os.path.join(root, file)
@@ -1474,8 +1477,8 @@ class ASSFunUI(Tk):
 
     # 保存程序设置
     def saveconfig(self):
-        if not os.path.exists(self.folder / Path("data")):
-            os.makedirs(self.folder / Path("data"))
+        if not os.path.exists(self.folder / "data"):
+            os.makedirs(self.folder / "data")
         if os.path.exists(self.config_file):
             os.remove(self.config_file)
         with open(self.config_file, "w", encoding="utf-8-sig") as json_file:
@@ -1556,6 +1559,13 @@ class ASSFunUI(Tk):
         with open(outputpath, "w", encoding="utf-8-sig") as file:
             file.write(file_content)
 
+    def get_resolution(self, mkv: Path) -> tuple[int, int]:
+        media_info = MediaInfo.parse(mkv)
+        for track in media_info.tracks:
+            if track.track_type == "Video":
+                return track.width, track.height
+        return None, None
+
     # 开始
     def start(self):
         self.log(f"当前设置：{self.values}")
@@ -1624,9 +1634,9 @@ class ASSFunUI(Tk):
             self.files = assgenerate.results
         # 字体处理
         fonts = self.getassfonts()
-        if os.path.exists(self.folder / Path("result")):
-            shutil.rmtree(self.folder / Path("result"))
-        os.makedirs(self.folder / Path("result"))
+        if os.path.exists(self.folder / "result"):
+            shutil.rmtree(self.folder / "result")
+        os.makedirs(self.folder / "result")
         real_fontpaths = []
         if self.values["subset"]:
             fontsubset_warning = self.getconfig("fontsubset_warning")
@@ -1643,9 +1653,7 @@ class ASSFunUI(Tk):
                         for _ in range(8)
                     )
                     replacedict[font] = f"{fontsubset_warning}{randomstr}"
-                    real_fontpath = (
-                        self.folder / Path("result") / Path(f"{font} - {randomstr}.ttf")
-                    )
+                    real_fontpath = self.folder / "result" / f"{font} - {randomstr}.ttf"
                     self.subset(
                         font,
                         font_path,
@@ -1655,7 +1663,7 @@ class ASSFunUI(Tk):
                     )
                     real_fontpaths.append(real_fontpath)
                     with open(
-                        self.folder / Path("result") / Path(f".{font}.txt"),
+                        self.folder / "result" / f".{font}.txt",
                         "w",
                         encoding="utf-8-sig",
                     ) as file:
@@ -1665,9 +1673,7 @@ class ASSFunUI(Tk):
                     return
             for file in self.files:
                 filename = os.path.basename(file)
-                self.asssubsetfix(
-                    file, self.folder / Path("result") / Path(filename), replacedict
-                )
+                self.asssubsetfix(file, self.folder / "result" / filename, replacedict)
             self.log(f"字幕字体处理完毕。共 {len(fonts)} 个字体。")
         else:
             self.asss = self.files
@@ -1675,12 +1681,8 @@ class ASSFunUI(Tk):
                 self.log(f"查找字体：{font}")
                 font_path, font_file = self.getfontfile(font)
                 if font_path:
-                    shutil.copy(
-                        font_path, self.folder / Path("result") / Path(font_file)
-                    )
-                    real_fontpaths.append(
-                        self.folder / Path("result") / Path(font_file)
-                    )
+                    shutil.copy(font_path, self.folder / "result" / font_file)
+                    real_fontpaths.append(self.folder / "result" / font_file)
                 else:
                     self.log(f'※"{font}" 的字体文件未能找到。')
                     return
@@ -1691,7 +1693,11 @@ class ASSFunUI(Tk):
             self.log(f"开始自动混流")
             mkvmerge_path = self.getconfig("mkvmerge_path")
             title = re.sub(r"\.mkv$", "", os.path.basename(mkv))
+            videotrack_resolution = self.get_resolution(mkv)
             filename_ext = self.getconfig("filename_ext")
+            filename_ext = re.sub(
+                r"\{res\}", str(videotrack_resolution[1]), filename_ext
+            )
             outputdir = self.getconfig("mkvoutputdir")
             if len(outputdir) == 0:
                 outputdir = os.path.dirname(mkv)
@@ -1702,7 +1708,6 @@ class ASSFunUI(Tk):
                 outputfile = f"{title}{filename_ext}.mkv"
             videotrack_lang: str = self.getconfig("videotrack_lang")
             videotrack_name: str = self.getconfig("videotrack_name")
-            videotrack_resolution: str = self.getconfig("videotrack_resolution")
             audiotrack_delay: str = self.getconfig("audiotrack_delay")
             audiotrack_lang: str = self.getconfig("audiotrack_lang")
             audiotrack_name: str = self.getconfig("audiotrack_name")
@@ -1722,6 +1727,13 @@ class ASSFunUI(Tk):
             assmultistyle_defaulttrack: str = self.getconfig(
                 "assmultistyle_defaulttrack"
             )
+            _select = SelectWindow(
+                self,
+                title="选择默认字幕样式",
+                selects=set().union(*(v.keys() for v in self.assstyles.values())),
+                default=assmultistyle_defaulttrack,
+            )
+            assmultistyle_defaulttrack = _select.get_result()
             fontsubset_warning: str = self.getconfig("fontsubset_warning")
             asstrack: dict[str, list[str, str]] = {
                 asschsjpntrack_symbol: [asschsjpntrack_lang, asschsjpntrack_name],
@@ -1733,7 +1745,7 @@ class ASSFunUI(Tk):
             cmd = f'start "mkvmux" "{mkvmerge_path}" --ui-language zh_CN --priority lower '
             cmd += f'--output ^"{outputdir}{outputfile}^" '
             cmd += f"--no-subtitles --no-attachments "
-            cmd += f'--language 0:{videotrack_lang} --track-name ^"0:{videotrack_name}^" --display-dimensions 0:{videotrack_resolution} '
+            cmd += f'--language 0:{videotrack_lang} --track-name ^"0:{videotrack_name}^" --display-dimensions 0:{videotrack_resolution[0]}x{videotrack_resolution[1]} '
             if int(audiotrack_delay) == 0:
                 audiotrack_delay = ""
             else:
